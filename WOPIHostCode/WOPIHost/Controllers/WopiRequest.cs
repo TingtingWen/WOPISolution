@@ -28,6 +28,7 @@ namespace WOPIHost.Controllers
         PutFile,
 
         EnumerateChildren,
+        EnumerateAncestors
     }
 
     static class WopiHeaders
@@ -45,6 +46,7 @@ namespace WOPIHost.Controllers
         public const string OverwriteRelativeTarget = "X-WOPI-OverwriteRelativeTarget";
         public const string UsingRestrictedScenario = "X-WOPI-UsingRestrictedScenario";
         public const string RestrictedLink = "X-WOPI-RestrictedLink";
+        public const string ApplicationId = "X-WOPI-ApplicationId";
     }
 
     class WopiRequest

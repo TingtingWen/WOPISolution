@@ -57,5 +57,11 @@ namespace WOPIHost
         /// <param name="name">File name</param>
         /// <returns>Return true if readonly, false otherwise.</returns>
         bool GetReadOnlyStatus(string name);
+
+        /// <summary>
+        /// Get directory
+        /// </summary>
+        /// <returns>Directory info</returns>
+        DirectoryInfo GetDirecotry();
     }
 }

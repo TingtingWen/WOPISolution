@@ -37,6 +37,15 @@ namespace WOPIHost
         }
 
         /// <summary>
+        /// Return directory.
+        /// </summary>
+        /// <returns>DirectoryInfo</returns>
+        public DirectoryInfo GetDirecotry()
+        {
+            return new DirectoryInfo(localStoragePath);
+        }
+
+        /// <summary>
         /// Get file last modified time.
         /// </summary>
         /// <param name="name">File name</param>

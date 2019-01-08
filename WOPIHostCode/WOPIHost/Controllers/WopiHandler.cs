@@ -38,6 +38,7 @@ namespace WOPIHost.Controllers
         /// A real lock implementation would use persised storage for locks.
         /// </summary>
         private static readonly Dictionary<string, LockInfo> Locks = new Dictionary<string, LockInfo>();
+        private static readonly List<string> WithoutRestrictedLinks = new List<string>();
 
         #region IHttpHandler Members
 
@@ -96,16 +97,25 @@ namespace WOPIHost.Controllers
                 case RequestType.GetRestrictedLink:
                     HandleGetRestrictedLink(context, requestData);
                     break;
+                case RequestType.ReadSecureStore:
+                    HandleReadSecureStore(context, requestData);
+                    break;
+                case RequestType.CheckFolderInfo:
+                    HandleCheckFolderInfo(context, requestData);
+                    break;
+                case RequestType.RevokeRestrictedLink:
+                    HandleRevokeRestrictedLink(context, requestData);
+                    break;
+                case RequestType.EnumerateAncestors:
+                    HandleEnumerateAncestorsForFile(context, requestData);
+                    break;
 
                 // These request types are not implemented in this sample.
                 // Of these, only PutRelativeFile would be implemented by a typical WOPI host.
                 case RequestType.PutRelativeFile: // If this is implemented, the UserCanNotWriteRelative field in CheckFileInfo needs to be updated.
                 case RequestType.EnumerateChildren:
-                case RequestType.CheckFolderInfo:
                 case RequestType.DeleteFile:
                 case RequestType.ExecuteCobaltRequest:
-                case RequestType.ReadSecureStore:
-                case RequestType.RevokeRestrictedLink:
                     ReturnUnsupported(context.Response);
                     break;
 
@@ -166,6 +176,13 @@ namespace WOPIHost.Controllers
                         requestData.Type = RequestType.GetFile;
                     if (request.HttpMethod == "POST")
                         requestData.Type = RequestType.PutFile;
+                }
+                else if (rawId.EndsWith("/ancestry"))
+                {
+                    requestData.Id = rawId.Substring(0, rawId.Length - "/ancestry".Length).ToLower();
+
+                    if (request.HttpMethod == "GET")
+                        requestData.Type = RequestType.EnumerateAncestors;
                 }
                 else
                 {
@@ -689,7 +706,8 @@ namespace WOPIHost.Controllers
                 return;
             }
 
-            if (!requestData.Headers[WopiHeaders.RestrictedLink].Equals("FORMS"))
+            if (string.IsNullOrEmpty(requestData.Headers.Get(WopiHeaders.RestrictedLink))
+                || !requestData.Headers[WopiHeaders.RestrictedLink].Equals("FORMS"))
             {
                 ReturnUnsupported(context.Response);
                 return;
@@ -704,7 +722,15 @@ namespace WOPIHost.Controllers
                 return;
             }
 
-            context.Response.AddHeader("X-WOPI-RestrictedUseLink", "http://officeserver4/restricted/" + requestData.Id);
+            if (WithoutRestrictedLinks.Contains(requestData.Id))
+            {
+                context.Response.AddHeader("X-WOPI-RestrictedUseLink", string.Empty);
+            }
+            else
+            {
+                context.Response.AddHeader("X-WOPI-RestrictedUseLink", "http://officeserver4/restricted/" + requestData.Id);
+            }
+
             ReturnSuccess(context.Response);
         }
 
@@ -723,7 +749,28 @@ namespace WOPIHost.Controllers
                 return;
             }
 
-            // TODO
+            if (string.IsNullOrEmpty(requestData.Headers.Get(WopiHeaders.RestrictedLink))
+                || !requestData.Headers[WopiHeaders.RestrictedLink].Equals("FORMS"))
+            {
+                ReturnUnsupported(context.Response);
+                return;
+            }
+
+            IFileStorage storage = FileStorageFactory.CreateFileStorage();
+            long size = storage.GetFileSize(requestData.Id);
+
+            if (size == -1)
+            {
+                ReturnFileUnknown(context.Response);
+                return;
+            }
+
+            if (!WithoutRestrictedLinks.Contains(requestData.Id))
+            {
+                WithoutRestrictedLinks.Add(requestData.Id);
+            }
+
+            ReturnSuccess(context.Response);
         }
 
         /// <summary>
@@ -741,7 +788,24 @@ namespace WOPIHost.Controllers
                 return;
             }
 
-            // TODO
+            if (string.IsNullOrEmpty(requestData.Headers.Get(requestData.Headers[WopiHeaders.ApplicationId])))
+            {
+                ReturnUnsupported(context.Response);
+                return;
+            }
+
+            ReadSecureStoreResponse responseData = new ReadSecureStoreResponse
+            {
+                UserName = "WOPITestUser",
+                Password = "Password01!",
+                IsWindowsCredentials = true,
+                IsGroup = false
+            };
+
+            string jsonString = JsonConvert.SerializeObject(responseData);
+
+            context.Response.Write(jsonString);
+            ReturnSuccess(context.Response);
         }
 
         /// <summary>
@@ -755,7 +819,69 @@ namespace WOPIHost.Controllers
                 return;
             }
 
-            // TODO
+            IFileStorage storage = FileStorageFactory.CreateFileStorage();
+            DirectoryInfo directory = storage.GetDirecotry();
+
+            if (!requestData.Id.Equals(directory.Name.ToLower()))
+            {
+                ReturnFileUnknown(context.Response);
+                return;
+            }
+
+            CheckFolderInfoResponse responseData = new CheckFolderInfoResponse
+            {
+                FolderName = directory.Name,
+                OwnerId = "FolderOwnerId"
+            };
+
+            string jsonString = JsonConvert.SerializeObject(responseData);
+
+            context.Response.Write(jsonString);
+            ReturnSuccess(context.Response);
+        }
+
+        /// <summary>
+        /// Processes an EnumerateAncestors (files) request
+        /// </summary>
+        /// <remarks>
+        /// For full documentation on EnumerateAncestors (files), see
+        /// https://wopi.readthedocs.io/projects/wopirest/en/latest/files/EnumerateAncestors.html
+        /// </remarks>
+        private void HandleEnumerateAncestorsForFile(HttpContext context, WopiRequest requestData)
+        {
+            if (!ValidateAccess(requestData, writeAccessRequired: false))
+            {
+                ReturnInvalidToken(context.Response);
+                return;
+            }
+
+            IFileStorage storage = FileStorageFactory.CreateFileStorage();
+            long size = storage.GetFileSize(requestData.Id);
+
+            if (size == -1)
+            {
+                ReturnFileUnknown(context.Response);
+                return;
+            }
+
+            DirectoryInfo directory = storage.GetDirecotry();
+            EnumerateAncestorsResponse responseData = new EnumerateAncestorsResponse
+            {
+                AncestorsWithRootFirst = new Ancestor[]
+                {
+                    new Ancestor
+                    {
+                        Name = directory.Name,
+                        Url = "http://" + context.Request.Url.Host + "wopi/folders/" + directory.Name + "?access_token=" +
+                        AccessTokenUtil.WriteToken(AccessTokenUtil.GenerateToken("TestUser".ToLower(), directory.Name))
+                    }
+                }
+            };
+
+            string jsonString = JsonConvert.SerializeObject(responseData);
+            context.Response.AddHeader("X-WOPI-EnumerationIncomplete", "true");
+            context.Response.Write(jsonString);
+            ReturnSuccess(context.Response);
         }
 
         #endregion

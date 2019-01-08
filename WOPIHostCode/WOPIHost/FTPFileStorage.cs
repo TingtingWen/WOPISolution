@@ -160,5 +160,10 @@ namespace WOPIHost
             // for FTP always assume read/write.
             return false;
         }
+
+        public DirectoryInfo GetDirecotry()
+        {
+            throw new NotImplementedException();
+        }
     }
 }
