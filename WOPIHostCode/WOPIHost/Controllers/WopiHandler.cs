@@ -822,7 +822,7 @@ namespace WOPIHost.Controllers
             IFileStorage storage = FileStorageFactory.CreateFileStorage();
             DirectoryInfo directory = storage.GetDirecotry();
 
-            if (!requestData.Id.Equals(directory.Name.ToLower()))
+            if (!requestData.Id.ToLower().Equals(directory.Name.ToLower()))
             {
                 ReturnFileUnknown(context.Response);
                 return;
